@@ -1,0 +1,15 @@
+{
+  "name": "FreeInkFont",
+  "version": "0.1.0",
+  "description": "Bounded static TrueType font metrics and glyph cache for PSRAM devices",
+  "platforms": "*",
+  "frameworks": "*",
+  "build": {
+    "flags": [
+      "-I third_party/freetype/include",
+      "-DFT2_BUILD_LIBRARY",
+      "-DFT_CONFIG_MODULES_H=\\\"FreeInkFontModules.h\\\"",
+      "-DFT_CONFIG_OPTIONS_H=\\\"FreeInkFontOptions.h\\\""
+    ]
+  }
+}
