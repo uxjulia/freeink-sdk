@@ -20,6 +20,19 @@ constexpr unsigned MetricSlots = 1024, PixelSlots = 512;
 uint64_t keyFor(int face, uint32_t cp, uint8_t points) {
   return (uint64_t(face + 1) << 40) | (uint64_t(points) << 32) | cp;
 }
+bool describeFace(FT_Face face, FaceInfo* info) {
+  if (!FT_IS_SCALABLE(face) || FT_HAS_MULTIPLE_MASTERS(face) || FT_Select_Charmap(face, FT_ENCODING_UNICODE) ||
+      !face->family_name || std::strlen(face->family_name) >= sizeof(FaceInfo::family))
+    return false;
+  if (info) {
+    *info = FaceInfo{};
+    std::strncpy(info->family, face->family_name, sizeof(info->family) - 1);
+    const auto* os2 = static_cast<const TT_OS2*>(FT_Get_Sfnt_Table(face, FT_SFNT_OS2));
+    info->style = (((face->style_flags & FT_STYLE_FLAG_BOLD) || (os2 && os2->usWeightClass >= 600)) ? 1 : 0) |
+                  ((face->style_flags & FT_STYLE_FLAG_ITALIC) ? 2 : 0);
+  }
+  return true;
+}
 }  // namespace
 struct alignas(std::max_align_t) Service::Block {
   size_t bytes;
@@ -141,7 +154,7 @@ int Service::open(const uint8_t* bytes, size_t len, FaceInfo* info) {
     FT_Face face = nullptr;
     const auto error = FT_New_Memory_Face(state_->library, bytes, FT_Long(len), 0, &face);
     if (error) return error == FT_Err_Out_Of_Memory ? -2 : -1;
-    if (!FT_IS_SCALABLE(face) || FT_HAS_MULTIPLE_MASTERS(face) || FT_Select_Charmap(face, FT_ENCODING_UNICODE)) {
+    if (!describeFace(face, info)) {
       FT_Done_Face(face);
       return -1;
     }
@@ -157,10 +170,6 @@ int Service::open(const uint8_t* bytes, size_t len, FaceInfo* info) {
         return -1;
       }
     }
-    if (!face->family_name || std::strlen(face->family_name) >= sizeof(FaceInfo::family)) {
-      FT_Done_Face(face);
-      return -1;
-    }
     state_->faces[i] = face;
     state_->sizes[i] = 0;
     const auto gsub = detail::table(bytes, len, "GSUB");
@@ -171,18 +180,52 @@ int Service::open(const uint8_t* bytes, size_t len, FaceInfo* info) {
                             FT_Get_Char_Index(face, sequences[l][2])};
       state_->standardLigatures[i][l] = detail::ligatureGlyph(gsub, glyphs, sequences[l][2] ? 3 : 2);
     }
-    if (info) {
-      *info = FaceInfo{};
-      if (face->family_name) {
-        std::strncpy(info->family, face->family_name, sizeof(info->family) - 1);
-      }
-      const auto* os2 = static_cast<const TT_OS2*>(FT_Get_Sfnt_Table(face, FT_SFNT_OS2));
-      info->style = (((face->style_flags & FT_STYLE_FLAG_BOLD) || (os2 && os2->usWeightClass >= 600)) ? 1 : 0) |
-                    ((face->style_flags & FT_STYLE_FLAG_ITALIC) ? 2 : 0);
-    }
     return int(i);
   }
   return -1;
+}
+int Service::inspect(ReadAt read, void* context, size_t length, FaceInfo& info) {
+  if (!state_ || !read || length < 12 || length > size_t(std::numeric_limits<FT_Long>::max())) return -1;
+  uint8_t header[12];
+  if (!read(context, 0, header, sizeof(header))) return -2;
+  if (header[0] || header[1] != 1 || header[2] || header[3]) return -1;
+  const unsigned tables = unsigned(header[4]) * 256 + header[5];
+  if (tables > (length - 12) / 16) return -1;
+  for (unsigned i = 0; i < tables; ++i) {
+    uint8_t tag[4];
+    if (!read(context, 12 + i * 16, tag, sizeof(tag))) return -2;
+    if (std::memcmp(tag, "fvar", 4) == 0) return -1;
+  }
+  struct Source {
+    ReadAt read;
+    void* context;
+    bool failed;
+  } source{read, context, false};
+  // External stream and callback state are borrowed only until FT_Done_Face.
+  // Large parser allocations still come from the caller's bounded arena.
+  FT_StreamRec stream{};
+  stream.size = static_cast<unsigned long>(length);
+  stream.descriptor.pointer = &source;
+  stream.read = [](FT_Stream stream, unsigned long offset, unsigned char* buffer,
+                   unsigned long count) -> unsigned long {
+    auto* source = static_cast<Source*>(stream->descriptor.pointer);
+    if (offset > stream->size || count > stream->size - offset) return count ? 0 : 1;
+    if (!count) return 0;
+    if (!source->read(source->context, offset, buffer, count)) {
+      source->failed = true;
+      return 0;
+    }
+    return count;
+  };
+  FT_Open_Args args{};
+  args.flags = FT_OPEN_STREAM;
+  args.stream = &stream;
+  FT_Face face = nullptr;
+  const auto error = FT_Open_Face(state_->library, &args, 0, &face);
+  if (error) return source.failed || error == FT_Err_Out_Of_Memory ? -2 : -1;
+  const bool valid = describeFace(face, &info);
+  FT_Done_Face(face);
+  return source.failed ? -2 : (valid ? 0 : -1);
 }
 void Service::close(int face) {
   if (!state_ || face < 0 || face >= int(MaxFaces) || !state_->faces[face]) return;

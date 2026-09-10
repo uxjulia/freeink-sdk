@@ -41,3 +41,8 @@ with a borrowed worker pointer. Preserve this patch when updating FreeType.
 Configuration lives in include/.
 The FreeType License (FTL.TXT) applies; retain its attribution in distributions.
 This software uses the FreeType library, copyright The FreeType Project.
+
+Metadata-only `Service::inspect` accepts a synchronous read-at callback. The caller
+owns storage and closes it after the call; inspection retains no stream or face.
+It uses the existing arena for parsing and never copies the entire source file.
+Returns 0 on success, -1 for unsupported data, -2 for allocation or I/O failures.

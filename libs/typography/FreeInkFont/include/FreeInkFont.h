@@ -26,6 +26,11 @@ class Service {
   bool begin(void* workspace, size_t workspaceBytes, void* pixels, size_t pixelBytes);
   void end();
   int open(const uint8_t* bytes, size_t length, FaceInfo* info = nullptr);
+  // Synchronous metadata inspection. Callback reads exactly count bytes at
+  // offset; borrowed context need only survive this call. Returns 0 on success,
+  // -1 for unsupported data, -2 for allocation or I/O failure. No face retained.
+  using ReadAt = bool (*)(void* context, size_t offset, uint8_t* bytes, size_t count);
+  int inspect(ReadAt read, void* context, size_t length, FaceInfo& info);
   void close(int face);
   bool covers(int face, uint32_t cp);
   bool metrics(int face, uint32_t cp, uint8_t points, Metrics& out);
