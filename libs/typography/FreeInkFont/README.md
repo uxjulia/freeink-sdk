@@ -18,7 +18,11 @@ There are 16 face slots, 1,024 metric slots, 512 kerning slots, and 512 image lo
 storage is a bounded append arena, recycled on exhaustion. Cached entries are
 indexed by face, codepoint, size, and coverage mode. No additional framebuffer is
 allocated. Caller examples use 768 KiB workspace and 512 KiB glyph storage; these
-are budgets, not minimum requirements for every font.
+are budgets, not minimum requirements for every font. The grayscale rasterizer's
+16 KiB cell pool belongs to its raster object and is allocated once through the
+same fallible workspace allocator; it never occupies the caller's task stack.
+Separate Service instances own separate pools. Initialization fails cleanly if
+any required FreeType module cannot be installed within the workspace.
 
 `open()` returns a nonnegative face ID, -1 for unsupported/malformed input, and
 -2 when FreeType cannot allocate. TTC, CFF/OTF, and variable TTF files are rejected.
@@ -31,6 +35,9 @@ kerning is enabled; advanced positioning needs a shaping engine.
 FreeType 2.14.3 sources in `third_party/freetype` are from official tag
 `VER-2-14-3`, commit `0a0221a1347e2f1e07c395263540026e9a0aa7c7` at
 https://github.com/freetype/freetype. Only include/, base/, truetype/, sfnt/, and
-smooth/ are vendored, without source edits. Configuration lives in include/.
+smooth/ are vendored. The local `ftgrays.c` patch moves the unchanged-size cell
+pool from `gray_convert_glyph`'s stack to the FT_Memory-owned raster object,
+with a borrowed worker pointer. Preserve this patch when updating FreeType.
+Configuration lives in include/.
 The FreeType License (FTL.TXT) applies; retain its attribution in distributions.
 This software uses the FreeType library, copyright The FreeType Project.

@@ -492,6 +492,7 @@ typedef ptrdiff_t  FT_PtrDist;
     TCoord  count_ey;        /* same as (max_ey - min_ey) */
 
     int         error;       /* pool overflow exception                  */
+    PCell       buffer;      /* FreeInk: raster-owned scratch pool       */
     PCell       cell;        /* current cell                             */
     PCell       cell_free;   /* call allocation next free slot           */
     PCell       cell_null;   /* last cell, used as dumpster and limit    */
@@ -532,6 +533,9 @@ typedef ptrdiff_t  FT_PtrDist;
   typedef struct gray_TRaster_
   {
     void*  memory;
+
+    /* FreeInk: allocate scratch once through FT_Memory, not on the task stack. */
+    TCell  buffer[FT_MAX_GRAY_POOL];
 
   } gray_TRaster, *gray_PRaster;
 
@@ -1861,7 +1865,7 @@ typedef ptrdiff_t  FT_PtrDist;
   static int
   gray_convert_glyph( RAS_ARG )
   {
-    TCell    buffer[FT_MAX_GRAY_POOL];
+    TCell*   buffer = ras.buffer;
     size_t   height = (size_t)( ras.cbox.yMax - ras.cbox.yMin );
     size_t   n = FT_MAX_GRAY_POOL / 8;
     TCoord   y;
@@ -1993,6 +1997,7 @@ typedef ptrdiff_t  FT_PtrDist;
            outline->contours[outline->n_contours - 1] + 1 )
       return FT_THROW( Invalid_Outline );
 
+    ras.buffer  = ((gray_PRaster)raster)->buffer;
     ras.outline = *outline;
 
     if ( params->flags & FT_RASTER_FLAG_DIRECT )

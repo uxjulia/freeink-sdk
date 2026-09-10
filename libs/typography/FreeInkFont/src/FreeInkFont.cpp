@@ -109,6 +109,13 @@ bool Service::begin(void* workspace, size_t bytes, void* pixels, size_t pixelByt
     return false;
   }
   FT_Add_Default_Modules(state_->library);
+  // Module installation can fail silently, including the raster scratch pool.
+  // Keep initialization fallible instead of accepting a partially usable engine.
+  if (!FT_Get_Module(state_->library, "truetype") || !FT_Get_Module(state_->library, "sfnt") ||
+      !FT_Get_Module(state_->library, "smooth")) {
+    end();
+    return false;
+  }
   pixels_ = static_cast<uint8_t*>(pixels);
   pixelBytes_ = pixelBytes;
   pixelUsed_ = 0;
