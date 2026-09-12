@@ -13,6 +13,9 @@ It is **drop-in compatible** with firmware written against the original
 `EInkDisplay` / `InputManager` / `BatteryMonitor` / `SDCardManager` / `BoardConfig`
 API: switching to FreeInk is a matter of repointing the library path.
 
+Start with [PlatformIO integration](#using-freeink-from-platformio), browse the
+[documentation index](docs/README.md), or run the [host tests](docs/testing.md).
+
 ## What's included
 
 - **Display facade and panel drivers** for SSD1677, UC8179, UC8253, UC8279,
@@ -103,8 +106,10 @@ firmware  ─calls─▶  EInkDisplay  (alias of freeink::FreeInkDisplay, the fa
 
 ### Nothing device-specific is hardcoded in generic code
 
-GPIOs come from the `EInkDisplay` constructor (firmware passes
-`BoardConfig::ACTIVE.display.*`) and from `BoardConfig`. SPI clocks have a
+Display GPIOs come from `BoardConfig::ACTIVE.display` at `begin()`, after any
+runtime board selection. The `EInkDisplay` constructor retains its pin arguments
+for source compatibility, but does not use them to configure the bus. Other
+peripheral GPIOs also come from `BoardConfig`. SPI clocks have a
 controller default and a board override. Waveforms/LUTs, booster values, scan
 direction, and refresh temperatures are injected via the driver config struct. A
 new device fills in values; the generic driver consumes them.

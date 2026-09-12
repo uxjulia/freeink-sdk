@@ -213,6 +213,16 @@ class DisplayTarget final : public DrawTarget {
                                ? invertedColor(style.color)
                                : style.color;
     const bool ink = inkColor == Color::Black;
+    if (style.align == TextAlign::Center && style.rotation == Rotation::None &&
+        text[0] >= '0' && text[0] <= '9' && text[1] == '\0') {
+      const FontGlyph* glyph = glyphFor(f, static_cast<uint32_t>(text[0]));
+      if (glyph && glyph->width > 0 && glyph->height > 0 && glyph->width <= rect.width && glyph->height <= rect.height) {
+        const int16_t x = static_cast<int16_t>(rect.x + (rect.width - glyph->width) / 2 - glyph->xOffset);
+        const int16_t baseline = static_cast<int16_t>(rect.y + (rect.height - glyph->height) / 2 - glyph->yOffset);
+        drawGlyph(f, *glyph, x, baseline, ink, inkColor);
+        return;
+      }
+    }
     layoutText(*this, rect, text, style, [&](const char* line, const Rect lineRect) {
       drawRun(f, line, lineRect.x, static_cast<int16_t>(lineRect.y + f.ascent), ink, inkColor);
     });

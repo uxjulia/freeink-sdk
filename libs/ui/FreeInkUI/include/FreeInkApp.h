@@ -466,16 +466,17 @@ public:
 
   void qwertyKeyboard(const QwertyKeyboardProps &props, int16_t height = 0,
                       LayoutAnchor anchor = LayoutAnchor::Top) {
-    ui::qwertyKeyboard(
-        frame_, take(anchor, height > 0 ? height : defaultKeyboardHeight()),
-        props);
+    const auto &layout = builtinKeyboardLayout(props.layout, props.shifted, props.symbols,
+                                                props.numberRow, props.langKey);
+    ui::qwertyKeyboard(frame_, takeKeyboard(anchor, height, layout.rowCount, props.padding,
+                                           props.rowGap, props.minTouchSize), props);
   }
 
   void keyboard(const KeyboardProps &props, int16_t height = 0,
                 LayoutAnchor anchor = LayoutAnchor::Top) {
-    ui::keyboard(frame_,
-                 take(anchor, height > 0 ? height : defaultKeyboardHeight()),
-                 props);
+    if (!props.layout) return;
+    ui::keyboard(frame_, takeKeyboard(anchor, height, props.layout->rowCount, props.padding,
+                                     props.rowGap, props.minTouchSize), props);
   }
 
   void bookCard(const BookCardProps &props, int16_t height = 0,
@@ -626,19 +627,25 @@ public:
   }
 
 private:
-  int16_t defaultKeyboardHeight() const {
+  Rect takeKeyboard(LayoutAnchor anchor, int16_t height, uint8_t rows,
+                    Insets padding, int16_t rowGap, int16_t minTouchSize) {
     const Rect safe = frame_.safeRect();
-    int16_t height =
-        static_cast<int16_t>(theme_.rowHeight * 3 + theme_.spaceSm * 3);
-    const int16_t widthBased = static_cast<int16_t>(safe.width / 4);
-    if (widthBased > height)
-      height = widthBased;
-    const int16_t maxHeight = static_cast<int16_t>(safe.height * 45 / 100);
-    if (height > maxHeight)
-      height = maxHeight;
-    if (height > safe.height)
-      height = safe.height;
-    return height < 1 ? 1 : height;
+    if (height <= 0) {
+      const int16_t minRow = minTouchSize > 64 ? minTouchSize : 64;
+      height = keyboardPreferredHeight(safe.width, rows, padding, rowGap, minRow);
+      // Keep the existing key heights when increasing the vertical separation.
+      // The half-screen budget includes a baseline 2px gap; add only the extra
+      // row spacing, leaving the entry field above the keyboard.
+      const int16_t extraGap = rowGap > 2 ? rowGap - 2 : 0;
+      const int16_t maxHeight = static_cast<int16_t>(safe.height / 2 + extraGap * (rows > 0 ? rows - 1 : 0));
+      if (height > maxHeight) height = maxHeight;
+    }
+    Rect rect = take(anchor, height);
+    // Text content margins should not squeeze the keyboard. Honor hardware
+    // safe areas, while using the full horizontal band reserved by take().
+    rect.x = safe.x;
+    rect.width = safe.width;
+    return rect;
   }
 
   static Rect insetClamped(Rect rect, Insets margin) {

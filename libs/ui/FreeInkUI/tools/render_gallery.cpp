@@ -1,6 +1,8 @@
 #include <FreeInkUI.h>
+#include <FreeInkApp.h>
 #include <FreeInkUIDisplayTarget.h>
 
+#include "keyboard_gallery_font.h"
 #include "gallery_font.h"   // kNotoSansSmallFont — a compact font for thumbnails
 
 #include <cstdint>
@@ -376,17 +378,36 @@ void renderPalette(const std::string& dir) {
     keyGrid(frame, rect, props);
   });
 
-  renderComponent(dir, "qwerty-keyboard.svg", "qwertyKeyboard", [](auto& frame, Rect rect) {
+  {
+    // Show the keyboard at device scale, including the dedicated number row.
+    Canvas c(480, 800);
+    c.target.setFont(FONT_SLOT_BODY, kNotoSansFont);
+    c.target.setFont(FONT_SLOT_TITLE, kKeyboardGalleryFont);
+    InteractionBuffer<64> interactions;
+    const DeviceContext device = deviceFor(c);
+    InputSnapshot input;
+    Frame<64> frame(c.target, device, input, interactions);
+    title(c.target, Rect{16, 10, 448, 22}, "qwertyKeyboard");
     QwertyKeyboardProps props;
     props.keyAction = 1;
     props.shiftAction = 2;
     props.modeAction = 3;
     props.deleteAction = 4;
     props.okAction = 5;
-    props.selectedIndex = 5;
-    props.labelText = text(0, TextAlign::Center);
-    qwertyKeyboard(frame, rect, props);
-  });
+    props.numberRow = true;
+    props.selectedIndex = 0;
+    props.labelText = text(FONT_SLOT_TITLE, TextAlign::Center);
+    props.controlText = text(FONT_SLOT_BODY, TextAlign::Center);
+    props.altText = text(FONT_SLOT_SMALL, TextAlign::Right);
+    ThemeTokens theme;
+    Screen<64> screen(frame, theme);
+    screen.qwertyKeyboard(props, 0, LayoutAnchor::Bottom);
+    TextFieldProps entry;
+    entry.text = "Hello";
+    entry.textStyle = text(FONT_SLOT_TITLE);
+    textField(frame, Rect{2, static_cast<int16_t>(screen.contentRect().bottom() - 58), 476, 52}, entry);
+    writeSvg(c, (dir + "/freeinkui-components/qwerty-keyboard.svg").c_str());
+  }
 
   renderComponent(dir, "gesture-bar.svg", "gestureBar", [](auto& frame, Rect rect) {
     GestureBarProps props;
@@ -812,7 +833,7 @@ void renderLibrary(const char* path) {
 }
 
 void renderOverlays(const char* path) {
-  Canvas c(640, 460);
+  Canvas c(640, static_cast<int16_t>(286 + keyboardPreferredHeight(440, 4) + 24));
   InteractionBuffer<96> interactions;
   auto frame = makeFrame(c, interactions);
   title(c.target, Rect{16, 12, 608, 24}, "Overlays, dialogs, keyboard, and actions");
@@ -869,8 +890,12 @@ void renderOverlays(const char* path) {
   keyboard.deleteAction = 40;
   keyboard.okAction = 41;
   keyboard.selectedIndex = 2;
-  keyboard.labelText = text(0, TextAlign::Center);
-  qwertyKeyboard(frame, Rect{20, 286, 440, 146}, keyboard);
+  c.target.setFont(FONT_SLOT_BODY, kNotoSansFont);
+  c.target.setFont(FONT_SLOT_TITLE, kKeyboardGalleryFont);
+  keyboard.labelText = text(FONT_SLOT_TITLE, TextAlign::Center);
+  keyboard.controlText = text(FONT_SLOT_BODY, TextAlign::Center);
+  keyboard.altText = text(FONT_SLOT_SMALL, TextAlign::Right);
+  qwertyKeyboard(frame, Rect{20, 286, 440, keyboardPreferredHeight(440, 4)}, keyboard);
 
   GestureBarProps gestures;
   gestures.left = GestureBarButton{"Back", {}, {}, 42};

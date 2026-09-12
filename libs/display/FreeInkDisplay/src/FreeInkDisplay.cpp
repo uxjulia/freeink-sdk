@@ -78,9 +78,8 @@ void invertBytes(uint8_t* buffer, const uint32_t size) {
 }
 }  // namespace
 
-FreeInkDisplay::FreeInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t rst, int8_t busy)
-    : _pins{sclk, mosi, cs, dc, rst, busy},
-      frameBuffer(nullptr)
+FreeInkDisplay::FreeInkDisplay(int8_t, int8_t, int8_t, int8_t, int8_t, int8_t)
+    : frameBuffer(nullptr)
 #ifndef EINK_DISPLAY_SINGLE_BUFFER_MODE
       ,
       frameBufferActive(nullptr)
@@ -201,8 +200,8 @@ void FreeInkDisplay::begin() {
     // Pins come from the active board profile (set by selectDriver()/setDisplayX3),
     // not the constructor args — same source the IT8951 driver already uses, so one
     // binary drives whichever panel is runtime-selected and per-board pins (incl.
-    // the EPD power-enable) are always correct. The ctor _pins are legacy and unused
-    // here; a consumer no longer needs to know the panel's wiring.
+    // the EPD power-enable) are always correct. Constructor pin arguments are
+    // retained for source compatibility; the active profile supplies the wiring.
     const auto& d = BoardConfig::ACTIVE.display;
     const EpdPins pins{d.sclk, d.mosi, d.cs, d.dc, d.rst, d.busy, d.powerEnable};
     _bus.begin(pins, _driver->spiHz(), _driver->busyPolarity(), _driver->spiMiso(), _driver->coCs());

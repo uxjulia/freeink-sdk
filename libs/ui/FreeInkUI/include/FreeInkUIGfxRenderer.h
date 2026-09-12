@@ -209,15 +209,30 @@ class GfxRendererTarget final : public DrawTarget {
 
     const auto drawAligned = [&](const char* textLine, const int y) {
       int x = rect.x;
+      int drawY = y;
       if (style.align != TextAlign::Left) {
         const int textW = renderer.getTextWidth(fontId, textLine, epdStyle);
         x = style.align == TextAlign::Center ? rect.x + (rect.width - textW) / 2 : rect.x + rect.width - textW;
         if (x < rect.x) x = rect.x;
       }
-      if (dithered && tryDrawTextDither(renderer, fontId, x, y, textLine, gfxColor(inkColor), epdStyle, 0)) {
+      // Single digits need ink centering: getTextWidth includes the left
+      // bearing, while drawText adds it again to the pen origin. Line-box
+      // centering also leaves the numeral low when the font has tall ascenders.
+      if (style.align == TextAlign::Center && textLine[0] >= '0' && textLine[0] <= '9' && textLine[1] == '\0' &&
+          (epdStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) == 0) {
+        const auto& fonts = renderer.getFontMap();
+        const auto font = fonts.find(fontId);
+        const auto* glyph = font != fonts.end() ? font->second.getGlyph(static_cast<uint32_t>(textLine[0]), epdStyle)
+                                               : nullptr;
+        if (glyph && glyph->width > 0 && glyph->height > 0 && glyph->width <= rect.width && glyph->height <= rect.height) {
+          x = rect.x + (rect.width - glyph->width) / 2 - glyph->left;
+          drawY = rect.y + (rect.height - glyph->height) / 2 + glyph->top - renderer.getFontAscenderSize(fontId);
+        }
+      }
+      if (dithered && tryDrawTextDither(renderer, fontId, x, drawY, textLine, gfxColor(inkColor), epdStyle, 0)) {
         return;
       }
-      renderer.drawText(fontId, x, y, textLine, black || dithered, epdStyle);
+      renderer.drawText(fontId, x, drawY, textLine, black || dithered, epdStyle);
     };
 
     // Fast path for the common case: text that already fits on one line draws

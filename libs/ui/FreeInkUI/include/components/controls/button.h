@@ -29,6 +29,8 @@ struct ButtonProps {
   int16_t gap = 4;
   uint8_t borderEdges = EdgesAll;
   bool enabled = true;
+  // Highlight insets affect paint only, preserving text and hit geometry.
+  Insets highlightInsets{};
 };
 
 template <size_t MaxInteractions>
@@ -47,9 +49,13 @@ void button(Frame<MaxInteractions>& frame, Rect rect, const ButtonProps& props) 
   State state = props.enabled ? props.state : static_cast<State>(props.state | StateDisabled);
   state = frame.stateFor(props.action, props.value, state);
   const BoxStyle& style = styles.resolve(state);
-  frame.target().fill(rect, style.background, style.radius, style.corners);
+  const bool highlighted = !hasState(state, StateDisabled) &&
+                           (hasState(state, StateSelected) || hasState(state, StateActive) ||
+                            hasState(state, StateFocused) || hasState(state, StateChecked));
+  const Rect backgroundRect = highlighted ? rect.inset(props.highlightInsets) : rect;
+  frame.target().fill(backgroundRect, style.background, style.radius, style.corners);
   if (style.border.kind != PaintKind::None && style.borderWidth > 0) {
-    drawBorderEdges(frame.target(), rect, style.border, style.borderWidth, style.radius, style.corners,
+    drawBorderEdges(frame.target(), backgroundRect, style.border, style.borderWidth, style.radius, style.corners,
                     props.borderEdges);
   }
 

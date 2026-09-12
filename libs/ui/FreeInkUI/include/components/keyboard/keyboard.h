@@ -38,6 +38,9 @@ enum class KeyboardLayoutId : uint8_t {
   // Hebrew: no letter case, so a single layer and no shift key. Right-to-left
   // is the renderer's job -- the layout inserts code points in logical order.
   HebrewIl,
+  // Arabic: same shape as Hebrew -- no case, one layer, no shift, RTL left to
+  // the renderer. Standard 101 arrangement; alef madda long-presses off أ.
+  ArabicAr,
 };
 
 struct KeyboardKey {
@@ -82,34 +85,54 @@ struct KeyboardProps {
   const char* modeLabel = nullptr;
   uint16_t inputMask = InputDefault;
   int16_t selectedIndex = -1;
-  TextStyle labelText{};
+  // Use the body font for primary labels; alternates retain the small font.
+  TextStyle labelText{FONT_SLOT_BODY};
   // Style for the small corner hint drawn on keys that define `alt`. The
   // color follows the key's resolved foreground; set the font here (typically
   // the small slot).
   TextStyle altText{};
   StyleSet keyStyles{};
-  Insets padding{5, 5, 5, 5};
-  int16_t gap = 3;
+  Insets padding{5, 2, 5, 2};
+  int16_t gap = 2;
   int16_t minTouchSize = 28;
-  uint8_t keyRadius = 0;
+  uint8_t keyRadius = 3;
   // Extra hit area below the last row's keys. Fingers occlude the key being
   // pressed and land low, and the last row has no key beneath it to catch the
   // miss — extend its hit band down to whatever sits below (hints bar, screen
   // edge). Visual rects are unchanged.
   int16_t bottomHitOverflow = 0;
   bool inactiveSelection = false;
+  // Optional smaller type for localized Shift/Mode/OK labels; unset inherits labelText.
+  TextStyle controlText{};
+  // Vertical separation is independent of the horizontal key gap.
+  int16_t rowGap = 6;
 };
+
+// Preferred total height for touch entry. Size each row independently so a
+// dedicated number row adds height instead of compressing every key. Callers
+// using the low-level Rect API can use this when reserving their keyboard area.
+inline int16_t keyboardPreferredHeight(int16_t width, uint8_t rowCount,
+                                      Insets padding = Insets{5, 2, 5, 2},
+                                      int16_t rowGap = 6, int16_t minRowHeight = 64) {
+  if (rowCount == 0) return 0;
+  int32_t rowHeight = width / 6;
+  if (rowHeight < minRowHeight) rowHeight = minRowHeight;
+  if (rowHeight < 1) rowHeight = 1;
+  const int32_t height = rowHeight * rowCount + (rowGap > 0 ? rowGap : 0) * (rowCount - 1)
+                         + padding.top + padding.bottom;
+  return static_cast<int16_t>(height > 32767 ? 32767 : (height > 0 ? height : 1));
+}
 
 // `numberRow` prepends a dedicated digit row (with shift-symbol alternates on
 // long-press) to the letter layers — for entry fields where digits must stay
 // one tap away (passwords, hosts, ports). The symbol layers already carry
 // digits, so they ignore the flag. Shift swaps the row to symbols-primary on
-// QwertyEn and picks the uppercase layer on the Cyrillic layouts; FR/DE/ES keep
-// their single letter layer, and HebrewIl has no case at all.
+// Latin and Cyrillic layouts and picks their uppercase letter layer. Hebrew
+// and Arabic have no case and keep the digit row unchanged.
 //
 // `langKey` puts a KeyKind::Lang key in the bottom row, for apps that let the
 // user reach more than one script. It costs a slot in that row, so it is off by
-// default and single-script keyboards render exactly as before. The non-Latin
+// default. The non-Latin
 // layouts ignore the flag and always carry the key: a keyboard with no Latin
 // letters cannot type a Wi-Fi password or a URL, so there always has to be a
 // way back.
@@ -510,7 +533,8 @@ void keyboard(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& pro
   rect = rect.inset(props.padding);
   if (rect.empty() || rect.width < 10 || rect.height < 10) return;
   const int16_t gap = props.gap < 0 ? 0 : props.gap;
-  const int16_t rowH = static_cast<int16_t>((rect.height - gap * (props.layout->rowCount - 1)) / props.layout->rowCount);
+  const int16_t rowGap = props.rowGap < 0 ? 0 : props.rowGap;
+  const int16_t rowH = static_cast<int16_t>((rect.height - rowGap * (props.layout->rowCount - 1)) / props.layout->rowCount);
   int16_t logicalIndex = 0;
 
   auto actionFor = [&](KeyKind kind) {
@@ -540,11 +564,32 @@ void keyboard(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& pro
     bp.inputMask = props.inputMask;
     bp.state = state;
     bp.text = keyText;
+    if ((key.kind == KeyKind::Shift || key.kind == KeyKind::Mode || key.kind == KeyKind::Ok) &&
+        !textStyleUnset(props.controlText)) {
+      bp.text = props.controlText;
+      bp.text.align = TextAlign::Center;
+      bp.text.maxLines = 1;
+    }
     bp.styles = styles;
     bp.minTouchSize = props.minTouchSize;
     bp.hitPadding.bottom = rowHitOverflow;
     bp.radius = props.keyRadius;
     bp.enabled = key.enabled && key.kind != KeyKind::Disabled;
+    {
+      // Center the shorter highlight on the unchanged label and touch target.
+      const int16_t labelHeight = frame.target().lineHeight(bp.text.font);
+      const int16_t spareHeight = static_cast<int16_t>(keyRect.height - labelHeight - 8);
+      const int16_t desiredTrim = static_cast<int16_t>(keyRect.height / 5);
+      int16_t trim = spareHeight > 0 ? (desiredTrim < spareHeight ? desiredTrim : spareHeight) : 0;
+      // Alternate hints need headroom above the centered primary glyph. Expand
+      // both sides equally so the highlight remains centered, and use this
+      // same geometry for hint placement in every interaction state.
+      if (key.kind == KeyKind::Normal && key.alt) {
+        trim = static_cast<int16_t>(trim > 8 ? trim - 8 : 0);
+      }
+      bp.highlightInsets.top = static_cast<int16_t>(trim / 2);
+      bp.highlightInsets.bottom = static_cast<int16_t>(trim - bp.highlightInsets.top);
+    }
     button(frame, keyRect, bp);
 
     // Delete and the script switch carry a glyph instead of a word: both mean
@@ -577,10 +622,15 @@ void keyboard(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& pro
       TextStyle altStyle = props.altText;
       altStyle.align = TextAlign::Right;
       altStyle.maxLines = 1;
-      altStyle.color = styles.resolve(frame.stateFor(action, key.value, state)).foreground.color;
+      const State resolvedState = frame.stateFor(action, key.value, state);
+      altStyle.color = styles.resolve(resolvedState).foreground.color;
+      // Reserve the same hint position before and during highlighting.
+      const int16_t rightPadding = 10;
+      const int16_t hintWidth = static_cast<int16_t>(keyRect.width - 2 - rightPadding);
       const int16_t altLh = frame.target().lineHeight(altStyle.font);
-      frame.target().text(Rect{static_cast<int16_t>(keyRect.x + 2), static_cast<int16_t>(keyRect.y + 2),
-                               static_cast<int16_t>(keyRect.width - 3), altLh},
+      const int16_t hintTop = static_cast<int16_t>(keyRect.y + 2 + bp.highlightInsets.top);
+      frame.target().text(Rect{static_cast<int16_t>(keyRect.x + 2), hintTop,
+                               static_cast<int16_t>(hintWidth > 0 ? hintWidth : 1), altLh},
                           key.alt, altStyle);
       return;
     }
@@ -606,7 +656,7 @@ void keyboard(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& pro
       units = static_cast<uint16_t>(units + (layoutRow.keys[col].widthUnits ? layoutRow.keys[col].widthUnits : 1));
     }
     const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
-    const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
+    const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + rowGap));
     int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW);
     const int16_t rowRight = static_cast<int16_t>(rect.right() - layoutRow.insetUnits * unitW);
     for (uint8_t col = 0; col < layoutRow.count; ++col) {

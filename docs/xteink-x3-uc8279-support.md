@@ -10,10 +10,9 @@ Build: nothing new — `-DFREEINK_DEVICE_X3=1` links both X3 drivers
 (`FREEINK_DRIVER_UC8253_X3` and `FREEINK_DRIVER_UC8279`); which one runs is
 decided at boot.
 
-The detection section reflects the stock V6.3.15 protocol. The driver notes
-below describe the initial OTP-based proposal and are historical; the current
-driver uses recovered external waveforms and register initialization. See the
-[V6.3.15 audit](x3-v6.3.15-firmware-audit.md) for the verified comparison.
+The detection section reflects the stock V6.3.15 protocol. The driver uses
+recovered external waveforms and register initialization; the initial OTP-only
+proposal is no longer the implementation.
 
 ## Runtime detection
 
@@ -45,25 +44,25 @@ differential refresh — the same paradigm as the UC8253 X3 driver, and a
 near-identical command set (PSR/PON/POF, DTM1 `0x10`, DSP `0x11`, DRF `0x12`,
 DTM2 `0x13`, CDI `0x50`, TRES `0x61`, DSLP `0x07`+`0xA5`).
 
-v1 uses the **factory OTP waveforms** (`PSR REG=0`): the 4K MTP carries 12
-temperature-range LUT sets, each with its own frame rate and rail voltages, and
-`TS_AUTO` re-senses temperature before every booster enable — so PWR/PLL/VDCS
-stay at silicon defaults and every refresh is temperature-compensated by the
-controller. Consequences, all **Pending** bench tuning:
+The driver programs the panel explicitly with external LUTs (`PSR REG=1`).
+The module's blank MTP cannot supply the factory defaults assumed by the original
+OTP-only proposal. The recovered initialization script configures power,
+booster, PLL, and a 792×528 partial window; RAM writes and refreshes use that
+window to avoid the controller's native 800×600 stride.
 
-- Full/Half/Fast currently run the same OTP waveform (likely a full GC-style
-  flash on every page turn). Fast page turns need custom register banks
-  (`REG=1`, commands `0x20`–`0x24`) — note the UC8279 LUT format is
-  **group-based** (7-byte groups, 7 groups per LUT in KW mode), *not* the
-  UC8253's 43-byte format, so the X3's six tuned banks cannot be copied over.
-- No grayscale yet (`supportsStripGrayscale()` false); the X3 reader's 4-level
-  AA path needs UC8279-format gray banks tuned on hardware.
-- TRES is programmed 792×528. The UC8253 X3 init programs VRES=600 (OEM scans
-  the full gate count); if the panel image is offset/compressed, try `0x02 0x58`
-  (see the note in `Uc8279Driver::initController`).
-- CDI default drives the border white each refresh (`0x97`); the datasheet
-  default (`0xD7`) floats it instead. Injectable via `Uc8279Config`
-  (`-DFREEINK_UC8279_CONFIG=yourConfig`, same idiom as the other drivers).
+- B/W refreshes use recovered full (GC) and fast (DU) banks.
+- Overlay grayscale uses XTF_AA waveforms with a separate B/W conditioning pass.
+- Absolute four-tone images use the XTH4 bank. Both grayscale modes support
+  complete-plane and strip uploads; neither advertises asynchronous grayscale
+  conditioning or staging while busy.
+- Ordinary B/W refreshes support the split `displayStart()` / `displayFinish()`
+  interface.
+
+See the [driver implementation](../libs/display/FreeInkDisplay/src/driver/Uc8279Driver.cpp),
+[waveform tables](../libs/display/FreeInkDisplay/src/lut/Uc8279X3Luts.h), and
+[grayscale API guide](grayscale-capabilities.md). Run the
+[display host tests](testing.md#display-drivers) for protocol regression coverage;
+physical tone separation and refresh quality still require hardware checks.
 
 ## Useful UC8279 features not yet wired
 

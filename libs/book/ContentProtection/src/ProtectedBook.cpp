@@ -227,22 +227,29 @@ bool ProtectedBook::decryptEntryToSink(ByteSource& source, Crypto& crypto,
 
   constexpr size_t kCipherChunk = 2048;
   constexpr size_t kOutputChunk = 4096;
+
+  // Biggest allocation first. mz_inflateInit2 needs ~40KB in ONE block (an
+  // inflate_state: the tinfl decompressor plus a 32KB dictionary), while the
+  // scratch below is 8KB. Taking the 8KB first can carve it out of the very
+  // block the 40KB needs, so a heap whose largest free region is ~47KB -- ample
+  // for the window on its own -- fails on the pair. Measured on device: image
+  // extraction refused at maxAlloc=47092 with 41168 required.
+  mz_stream stream;
+  memset(&stream, 0, sizeof(stream));
+  if (mz_inflateInit2(&stream, -15) != MZ_OK) {
+    lastError_ = "inflate setup failed";
+    return false;
+  }
+
   auto* buffers = static_cast<uint8_t*>(malloc(kCipherChunk * 2 + kOutputChunk));
   if (!buffers) {
+    mz_inflateEnd(&stream);
     lastError_ = "insufficient memory for content stream";
     return false;
   }
   uint8_t* cipher = buffers;
   uint8_t* plain = cipher + kCipherChunk;
   uint8_t* output = plain + kCipherChunk;
-
-  mz_stream stream;
-  memset(&stream, 0, sizeof(stream));
-  if (mz_inflateInit2(&stream, -15) != MZ_OK) {
-    free(buffers);
-    lastError_ = "inflate setup failed";
-    return false;
-  }
 
   bool ended = false;
   auto inflateChunk = [&](const uint8_t* data, size_t size) {

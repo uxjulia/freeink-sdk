@@ -118,8 +118,6 @@ inline const uint8_t kUc8279X3_XtfPreBwMid[5][43] = {
     {0x24, 0x01, 0x06, 0x01, 0x06, 0x06, 0x01, 0x01, 0x01, 0x02, 0x44, 0x00, 0x00, 0x01, 0x01},
 };
 
-constexpr uint8_t kUc8279X3_XtfAaCdi = 0x97;
-
 // Power-on init register script (recovered from FUN_42014ad4). Encoded as
 // {cmd, len, data...} records; a driver replays it right after reset, before
 // loading a waveform bank and issuing PON/DRF.

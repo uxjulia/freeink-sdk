@@ -6,12 +6,13 @@ device from the ESP32-C3 `XTEINK_X4` — it has its own S3 profile,
 `BoardConfig::XTEINK_X4_PRO`.
 
 The panel controller **varies by production batch**: original units carry an
-**SSD1677**, newer batches a **UC8179** (an UltraChip part). Both drive the same
+**SSD1677**; UltraChip variants use **UC8179** or **UC8279**. All drive the same
 800×480 glass and the same pinout; the SDK selects the right driver at boot — see
 [Display controller variants](#display-controller-variants--runtime-detection).
 
 Build: `-DFREEINK_DEVICE_X4PRO=1` (see `platformio.sample.ini` `[env:x4pro]`).
-`FREEINK_DRIVER_SSD1677`, `FREEINK_DRIVER_UC8179`, `FREEINK_CAP_TOUCH`, and
+`FREEINK_DRIVER_SSD1677`, `FREEINK_DRIVER_UC8179`, `FREEINK_DRIVER_UC8279_X4`,
+`FREEINK_CAP_TOUCH`, and
 `FREEINK_CAP_FRONTLIGHT` auto-enable. The SD path additionally requires
 `USE_BLOCK_DEVICE_INTERFACE=1` in the consumer build (the `x4pro` env defines it).
 
@@ -19,6 +20,20 @@ This doc reflects a hardware bring-up + reverse-engineering session. Items are
 marked **Confirmed on hardware** where directly probed, **Corrected** where an
 earlier claim has since been disproven on the bench, or **Pending** where still
 inferred from the firmware dump only.
+
+## Display controller variants — runtime detection
+
+Call `applyXteinkDisplayController()` from `XteinkDetect.h` before
+`FreeInkDisplay::begin()`. It probes the active profile's display bus and updates
+`BoardConfig::ACTIVE.displayController` for a confirmed UltraChip variant;
+`begin()` then selects the matching driver. An inconclusive probe retains the
+profile's default controller. The OEM NVS `hw_calib/screenType` value is used
+only for diagnostics, because flashing an image from another unit can overwrite it.
+
+The SSD1677 bring-up notes below describe that controller specifically. See
+[grayscale capabilities](grayscale-capabilities.md) for the current upload
+contracts and the [Licorice firmware audit](xteink-x4pro-licorice-analysis.md)
+for version-scoped controller findings.
 
 ## Display — SSD1677, 800×480
 

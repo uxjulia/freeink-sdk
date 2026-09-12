@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the real UC8279 driver with a recording bus and host Arduino shims."""
+"""Compile the real UC8253 X3 driver with a recording bus and host Arduino shims."""
 from pathlib import Path
 import os
 import shutil

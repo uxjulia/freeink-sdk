@@ -25,6 +25,8 @@ class PanelDriver;
 
 class FreeInkDisplay {
  public:
+  // Legacy pin arguments are retained for source compatibility. begin() uses
+  // BoardConfig::ACTIVE.display, including any runtime-selected board profile.
   FreeInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t rst, int8_t busy);
   ~FreeInkDisplay() = default;
 
@@ -412,7 +414,6 @@ class FreeInkDisplay {
   RefreshMode resolveReleasedMode(RefreshMode mode) const;
 #endif
 
-  EpdPins _pins;
   EpdBus _bus;
   PanelDriver* _driver = nullptr;
 

@@ -19,7 +19,7 @@
 //   - kUc8279X3_BwGc  : B/W full (GC) waveform  (5 x 43, command-prefixed)
 //   - kUc8279X3_BwDu  : B/W fast (DU) waveform  (5 x 43, command-prefixed)
 //   - CDI 0x97 first refresh / 0xD7 later; DU adds E0=02, E5=5A.
-// (XTF_AA / XTH4 grayscale banks are also captured there for a later AA path.)
+// XTF_AA / XTH4 banks supply overlay and absolute grayscale respectively.
 //
 // BUSY_N: low while busy (PON/DRF/POF all flag), same two-phase shape as the
 // UC8253 X3 — reuses BusyPolarity::X3TwoPhase and the async start/finish split.
